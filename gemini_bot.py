@@ -433,6 +433,17 @@ class GeminiBot:
         elif self.state == 5:
             pass #safe debugging state
 
+    def update_server(self, url):
+        print("updating server with order history...")
+        requests.post(url, json = {
+            "order_history" : self.order_history,
+            "last_price" : self.last_price,
+            "lowest_ask" : self.lowest_ask,
+            "highest_bid" : self.highest_bid,
+            "timestamp" :time.time()
+            }
+        )
+
 
 
     def run(self):
@@ -443,15 +454,9 @@ class GeminiBot:
             iterations += 1
             if (iterations % 5 == 0):
                 #UPDATE SERVER
-                print("updating server with order history...")
-                requests.post("http://localhost:8080", json = {
-                    "order_history" : self.order_history,
-                    "last_price" : self.last_price,
-                    "lowest_ask" : self.lowest_ask,
-                    "highest_bid" : self.highest_bid,
-                    "timestamp" :time.time()
-                    }
-                )
+                self.update_server("http://localhost:8080")
+        self.update_server("http://localhost:8080") #Final update
+
 
 if __name__ == '__main__':
     g = GeminiBot("btcusd", .0005, .0005)
