@@ -3,9 +3,6 @@ from dotenv import dotenv_values
 config = dotenv_values(".env")
 
 import json
-import ssl
-import websocket
-from threading import Thread
 from time import sleep
 
 price = 0.0
@@ -21,6 +18,21 @@ class GeminiBot:
         self.sell_order_price = 0
         self.count = 0
         self.transactions = []
+        self.timestamp = 0
+        self.lastTradePrice = 0
+
+    """
+    Check if an order has been placed
+    If so, see how much of the order is left to be filled
+    """
+    def order_remaining(self):
+        pass
+
+    """
+    If an order has yet to be filled cancel it
+    """
+    def cancel_order(self):
+        pass
 
     """
     ticker : str
@@ -30,9 +42,8 @@ class GeminiBot:
     returns boolean : true if successful, false otherwise
     """
     def maker_or_cancel_order(self, type, price, amount):
-        while True:
-            sleep(1)
-            print(amount)
+        print("Limit or cancel {} order placed: {}{} at ${}").format(
+                type, amount, self.ticker, price)
 
     """
     ws : WebSocketApp
@@ -69,35 +80,29 @@ class GeminiBot:
 
     """
     def strategy1(self, ws, message):
-        data = json.loads(message)
-        print(data)
-        # thread = Thread(target = self.maker_or_cancel_order, args = ("bid", 10, 10))
-        # thread.start()
+        #BTC SPREAD IS ~ .0002 * price
+
+        # UPDATE BOT STATE
         if self.state == 0:
-            if self.amountToBuy > self.amountToSell:
-                self.state = 1
-            self.state = 3
+            pass
 
         elif self.state == 1:
+            print("Making buy order...")
             pass
 
         elif self.state == 2:
-            pass
+            print("Waiting for buy order to fill...")
 
         elif self.state == 3:
-            
+            print("Making sell order")
 
         elif self.state == 4:
-            pass
+            print("Waiting for sell to fill...")
 
-    """
-    Monitors trades for the object's specified ticker and runs self.on_message
-    at every update
-    """
-    def run_forever(self):
-        ws = websocket.WebSocketApp(
-            "wss://api.gemini.com/v1/marketdata/{}?trades=true".format(self.ticker),
-            on_message=self.strategy1)
-        ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE})
 
-GeminiBot("btcusd", 10, 10).run_forever()
+        elif self.state == 5:
+            print("Safe debugging state...")
+            #safe debugging state
+
+if __name__ == '__main__':
+    g = GeminiBot("btcusd", .0005, .0005)
