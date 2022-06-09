@@ -40,6 +40,9 @@ class GeminiBot:
         self.end_condition_met = False
         self.order_history = []
         self.nonce = int(time.time()*1000)
+        self.lowest_ask = 0
+        self.highest_bid = 0
+        self.last_price = 0
 
     def nonce_up(self):
         self.nonce += 1
@@ -48,7 +51,6 @@ class GeminiBot:
     """
     def get_ticker_info(self):
         self.nonce_up()
-        print(self.nonce)
 
 
         try:
@@ -152,7 +154,7 @@ class GeminiBot:
                 #CHECK IF ANY ORDERS IN ORDER HISTORY HAVE EXECUTED
                 recent_trades = self.get_past_trades()
                 for order in self.order_history:
-                    if float(order["amount_remaining"]) > 0:
+                    if float(order["amount_remaining"]) > 0 and not order["cancelled"]:
                         for o in recent_trades:
                             if o["order_id"] == order["id"]:
                                 order["amount_remaining"] = 0.0
@@ -215,7 +217,7 @@ class GeminiBot:
             print(result)
             if result["result"] == "ok":
                 for order in self.order_history:
-                    if not order["cancelled"]:
+                    if (not order["cancelled"]) and float(order["amount_remaining"]) > 0 :
                         order["cancelled"] = True
                 return True
             return False
@@ -275,6 +277,10 @@ class GeminiBot:
                             headers=request_headers)
 
             new_order = response.json()
+            print(new_order)
+            if "is_cancelled" in new_order:
+                if new_order["is_cancelled"]:
+                    return "is_cancelled"
             if "is_live" in new_order and new_order["is_live"]:
                 print("Limit or cancel {} order placed: {}{} at ${}".format(
                         type, amount, self.ticker, price))
@@ -290,6 +296,7 @@ class GeminiBot:
                         "cancelled" : False
                     }
                 )
+
                 return True
             else:
                 print(new_order)
@@ -341,27 +348,33 @@ class GeminiBot:
         print("")
         print("---"*10)
         print("Getting ticker info for {}".format(self.ticker))
+        print(self.amountToBuy, self.amountToBuy)
+        if self.amountToSell <= 0 and self.amountToBuy <= 0:
+            self.end_condition_met = True
+            return
 
 
-        last_price, lowest_ask, highest_bid = self.get_ticker_info()
-        print(last_price)
+        self.last_price, self.lowest_ask, self.highest_bid = self.get_ticker_info()
         trade_size = .00005
         margin = .0001
         # UPDATE BOT STATE
 
         if self.state == 0:
             print("Deciding to buy or sell next")
-            if self.amountToBuy > self.amountToSell:
+            if self.amountToBuy >= self.amountToSell:
                 self.state = 1
             else:
                 self.state = 3
 
         elif self.state == 1:
             print("Making buy order...")
-            self.bid_order_price = last_price*(1 - margin)
+            self.bid_order_price = self.last_price*(1 - margin)
             order_success =  self.maker_or_cancel_order("bid", self.bid_order_price, trade_size)
-            if order_success:
+            if order_success == True:
                 self.state = 2
+                return
+            elif order_success == "is_cancelled":
+                print("order cancelled before execution - would have taken")
                 return
             else:
                 print("buy order failed")
@@ -374,7 +387,7 @@ class GeminiBot:
                 self.amountToBuy -= original_amount
                 self.state = 0
                 return
-            elif last_price > self.bid_order_price * (1 + 2*margin): #market has moved the other way
+            elif self.last_price > self.bid_order_price * (1 + 2*margin): #market has moved the other way
                 "CANCEL THRESHOLD TRIGGERED"
                 success = self.cancel_active_orders()
                 if success:
@@ -385,12 +398,16 @@ class GeminiBot:
                     print("cancel order failed")
                     self.state = 5
 
+
         elif self.state == 3:
             print("Making sell order")
-            self.sell_order_price = last_price*(1 + margin)
+            self.sell_order_price = self.last_price*(1 + margin)
             order_success = self.maker_or_cancel_order("ask", self.sell_order_price, trade_size)
-            if order_success:
+            if order_success == True:
                 self.state = 4
+                return
+            elif order_success == "is_cancelled":
+                print("order cancelled before execution - would have taken")
                 return
             else:
                 print("sell order failed")
@@ -403,7 +420,7 @@ class GeminiBot:
                 self.amountToSell -= original_amount
                 self.state = 0
                 return
-            elif last_price < self.sell_order_price * (1 - 2*margin):
+            elif self.last_price < self.sell_order_price * (1 - 2*margin):
                 "CANCEL THRESHOLD TRIGGERED"
                 success = self.cancel_active_orders()
                 if success:
@@ -416,13 +433,25 @@ class GeminiBot:
         elif self.state == 5:
             pass #safe debugging state
 
-        if self.amountToSell == 0 and self.amountToBuy == 0:
-            self.end_condition_met = True
+
 
     def run(self):
+        iterations = 0
         while self.end_condition_met == False:
             sleep(1)
             self.strategy1()
+            iterations += 1
+            if (iterations % 5 == 0):
+                #UPDATE SERVER
+                print("updating server with order history...")
+                requests.post("http://localhost:8080", json = {
+                    "order_history" : self.order_history,
+                    "last_price" : self.last_price,
+                    "lowest_ask" : self.lowest_ask,
+                    "highest_bid" : self.highest_bid,
+                    "timestamp" :time.time()
+                    }
+                )
 
 if __name__ == '__main__':
     g = GeminiBot("btcusd", .0005, .0005)

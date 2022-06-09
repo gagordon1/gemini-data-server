@@ -1,14 +1,15 @@
 from gemini_bot import GeminiBot
 from time import sleep
+import requests
 
-ticker = "btcusd"
-amountToBuy = .0003 #$15
-amountToSell = .0003 #$15
-g = GeminiBot(ticker, amountToBuy, amountToSell)
-
-
-last_price, lowest_ask, highest_bid = g.get_ticker_info()
-print("last price: {}, lowest ask: {}, highest bid: {}".format(last_price, lowest_ask, highest_bid))
+# ticker = "btcusd"
+# amountToBuy = .0003 #$15
+# amountToSell = .0003 #$15
+# g = GeminiBot(ticker, amountToBuy, amountToSell)
+#
+#
+# last_price, lowest_ask, highest_bid = g.get_ticker_info()
+# print("last price: {}, lowest ask: {}, highest bid: {}".format(last_price, lowest_ask, highest_bid))
 
 
 # success = g.maker_or_cancel_order("ask", 60000, amountToBuy) # make an ask at 60000
@@ -24,3 +25,5 @@ print("last price: {}, lowest ask: {}, highest bid: {}".format(last_price, lowes
 # print(g.order_history)
 # sleep(1)
 # status = g.get_order_status()
+
+requests.post("http://localhost:8080", json = [1,2,3])
