@@ -39,13 +39,18 @@ class GeminiBot:
         self.lastTradePrice = 0
         self.end_condition_met = False
         self.order_history = []
-        self.nonce = 0
+        self.nonce = int(time.time()*1000)
 
+    def nonce_up(self):
+        self.nonce += 1
     """
     returns last price, lowest ask, highest bid for the object's ticker
     """
     def get_ticker_info(self):
-        print("Getting ticker info for {}".format(self.ticker))
+        self.nonce_up()
+        print(self.nonce)
+
+
         try:
             url = BASE_URL + TICKER_INFO_ENDPOINT + self.ticker
             response = requests.get(url)
@@ -57,15 +62,14 @@ class GeminiBot:
     Gets statuses of open orders or returns False on error
     """
     def get_order_statuses(self):
+        self.nonce_up()
         try:
             gemini_api_key = config["GEMINI_TRADING_API_KEY"]
             gemini_api_secret = config["GEMINI_TRADING_API_SECRET"].encode()
 
-            t = datetime.datetime.now()
-            payload_nonce =  str(int(time.mktime(t.timetuple())*1000))
 
             payload = {
-                "nonce": payload_nonce,
+                "nonce": self.nonce,
                 "request": "/v1/orders"
             }
 
@@ -94,16 +98,16 @@ class GeminiBot:
     Gets statuses of closed orders or returns False on error
     """
     def get_past_trades(self):
+        self.nonce_up()
         print("getting past trades")
         try:
             gemini_api_key = config["GEMINI_TRADING_API_KEY"]
             gemini_api_secret = config["GEMINI_TRADING_API_SECRET"].encode()
 
-            t = datetime.datetime.now()
-            payload_nonce =  str(int(time.mktime(t.timetuple())*1000) +1)
+
 
             payload = {
-                "nonce": payload_nonce,
+                "nonce": self.nonce,
                 "request":  "/v1/mytrades",
                 "symbol" : self.ticker,
                 "limit_trades" : 10
@@ -178,6 +182,7 @@ class GeminiBot:
     Returns True if successfully canceled false otherwise
     """
     def cancel_active_orders(self):
+        self.nonce_up()
         print("canceling orders")
         try:
             gemini_api_key = config["GEMINI_TRADING_API_KEY"]
@@ -187,7 +192,7 @@ class GeminiBot:
             payload_nonce =  str(int(time.mktime(t.timetuple())*1000))
 
             payload = {
-                "nonce": payload_nonce,
+                "nonce": self.nonce,
                 "request": "/v1/order/cancel/all"
             }
 
@@ -207,6 +212,7 @@ class GeminiBot:
                             headers=request_headers)
 
             result = response.json()
+            print(result)
             if result["result"] == "ok":
                 for order in self.order_history:
                     if not order["cancelled"]:
@@ -225,6 +231,7 @@ class GeminiBot:
     returns boolean : true if successful, false otherwise
     """
     def maker_or_cancel_order(self, type, price, amount):
+        self.nonce_up()
         print("Placing limit {} order".format(type))
         price = round(price, 2)
 
@@ -243,7 +250,7 @@ class GeminiBot:
 
             payload = {
                "request": "/v1/order/new",
-                "nonce": payload_nonce,
+                "nonce": self.nonce,
                 "symbol": self.ticker,
                 "amount": str(amount),
                 "price": str(price),
@@ -283,7 +290,6 @@ class GeminiBot:
                         "cancelled" : False
                     }
                 )
-                print(self.order_history)
                 return True
             else:
                 print(new_order)
@@ -332,11 +338,17 @@ class GeminiBot:
     """
     def strategy1(self):
         #BTC SPREAD IS ~ .0002 * price
+        print("")
+        print("---"*10)
+        print("Getting ticker info for {}".format(self.ticker))
+
 
         last_price, lowest_ask, highest_bid = self.get_ticker_info()
+        print(last_price)
         trade_size = .00005
         margin = .0001
         # UPDATE BOT STATE
+
         if self.state == 0:
             print("Deciding to buy or sell next")
             if self.amountToBuy > self.amountToSell:
@@ -350,8 +362,10 @@ class GeminiBot:
             order_success =  self.maker_or_cancel_order("bid", self.bid_order_price, trade_size)
             if order_success:
                 self.state = 2
+                return
             else:
                 print("buy order failed")
+                self.state = 5
 
         elif self.state == 2:
             print("Waiting for buy order to fill...")
@@ -359,13 +373,17 @@ class GeminiBot:
             if amount_remaining == 0:
                 self.amountToBuy -= original_amount
                 self.state = 0
-            elif last_price > self.bid_order_price * (1 + margin): #market has moved the other way
+                return
+            elif last_price > self.bid_order_price * (1 + 2*margin): #market has moved the other way
+                "CANCEL THRESHOLD TRIGGERED"
                 success = self.cancel_active_orders()
                 if success:
                     self.amountToBuy -= (original_amount - amount_remaining) #amount bought
                     self.state = 0
+                    return
                 else:
                     print("cancel order failed")
+                    self.state = 5
 
         elif self.state == 3:
             print("Making sell order")
@@ -373,8 +391,10 @@ class GeminiBot:
             order_success = self.maker_or_cancel_order("ask", self.sell_order_price, trade_size)
             if order_success:
                 self.state = 4
+                return
             else:
                 print("sell order failed")
+                self.state = 5
 
         elif self.state == 4:
             print("Waiting for sell to fill...")
@@ -382,13 +402,19 @@ class GeminiBot:
             if amount_remaining == 0:
                 self.amountToSell -= original_amount
                 self.state = 0
-            elif last_price < self.sell_order_price * (1 - margin):
+                return
+            elif last_price < self.sell_order_price * (1 - 2*margin):
+                "CANCEL THRESHOLD TRIGGERED"
                 success = self.cancel_active_orders()
                 if success:
                     self.amountToSell -= (original_amount - amount_remaining) #amount successfully sold
                     self.state = 0
+                    return
                 else:
                     print("cancel order failed")
+                    self.state = 5
+        elif self.state == 5:
+            pass #safe debugging state
 
         if self.amountToSell == 0 and self.amountToBuy == 0:
             self.end_condition_met = True
