@@ -150,7 +150,6 @@ class GeminiBot:
             orders = self.get_order_statuses()
 
             if len(orders) == 0:
-                print("No orders open")
                 #CHECK IF ANY ORDERS IN ORDER HISTORY HAVE EXECUTED
                 recent_trades = self.get_past_trades()
                 for order in self.order_history:
@@ -230,7 +229,8 @@ class GeminiBot:
     type : "bid" | "ask"
     price : float
     amount : float
-    returns boolean : true if successful, false otherwise
+    returns boolean : true if successful, "is_cancelled" if the trade was cancelled
+                on submit (it would have been a taker), false otherwise
     """
     def maker_or_cancel_order(self, type, price, amount):
         self.nonce_up()
@@ -277,7 +277,6 @@ class GeminiBot:
                             headers=request_headers)
 
             new_order = response.json()
-            print(new_order)
             if "is_cancelled" in new_order:
                 if new_order["is_cancelled"]:
                     return "is_cancelled"
@@ -324,7 +323,7 @@ class GeminiBot:
             if (order filled)
                 decrement amount to buy
                 move to state 0
-            if (last_price > bid_order_price * (1 + margin))
+            if (last_price > bid_order_price * (1 + 2*margin))
                 cancel order
                 decrement amount to buy if partially filled
                 move to state 0
@@ -337,7 +336,7 @@ class GeminiBot:
             if (order filled)
                 decrement amount to sell
                 move to state 0
-            if (last_price < bid_order_price * (1-margin))
+            if (last_price < bid_order_price * (1-2*margin))
                 cancel order
                 decrement amonunt to sell if partially filled
                 move to state 0
